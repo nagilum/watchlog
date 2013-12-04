@@ -1,0 +1,40 @@
+fieldset#edit-filter-type-wrapper,
+fieldset#edit-filter-severity-wrapper,
+fieldset#edit-filter-date-wrapper,
+fieldset#edit-filter-search-wrapper,
+fieldset#edit-filter-actions-wrapper,
+fieldset#edit-filter-limit-wrapper {
+  float: left;
+  margin-right: 10px;
+  min-height: 260px;
+  min-width: 300px;
+}
+
+fieldset#edit-watchlog-wrapper div.fieldset-wrapper fieldset legend span {
+  background-image: none;
+}
+
+select#edit-filter-type,
+select#edit-filter-severity,
+select#edit-filter-order,
+select#edit-filter-order-direction,
+input#edit-filter-date-from,
+input#edit-filter-date-to,
+input#edit-filter-search,
+input#edit-filter-limit {
+  width: 260px;
+}
+
+td.watchlog-small {
+  width: 50px;
+}
+td.watchlog-medium {
+  width: 100px;
+}
+td.watchlog-large {
+  width: 150px;
+}
+
+tr.watchlog-row:hover {
+  background-color: #e3e4dd;
+}

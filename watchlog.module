@@ -1,0 +1,427 @@
+<?php
+
+/**
+ * @file
+ * XXX
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function watchlog_menu() {
+  $items = array(
+    'admin/reports/watchlog' => array(
+      'title'            => 'Watchlog',
+      'description'      => 'A different view of the dblog entries.',
+      'page callback'    => 'drupal_get_form',
+      'page arguments'   => array('watchlog_view_logs'),
+      'access arguments' => array('administer watchlog'),
+    ),
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function watchlog_permission() {
+  $permissions = array(
+    'administer watchlog' => array(
+      'title'       => t('View the watchdog log'),
+      'description' => t('View and search through the watchdog logs.'),
+    ),
+  );
+
+  return $permissions;
+}
+
+/**
+ * View and search through the watchdog logs.
+ */
+function watchlog_view_logs() {
+  global $databases;
+
+  $types     = array();
+  $date_from = NULL;
+  $date_to   = NULL;
+  $collapsed = TRUE;
+
+  // Set severities.
+  $severities = array(
+    WATCHDOG_EMERGENCY => 'emergency',
+    WATCHDOG_ALERT     => 'alert',
+    WATCHDOG_CRITICAL  => 'critical',
+    WATCHDOG_ERROR     => 'error',
+    WATCHDOG_WARNING   => 'warning',
+    WATCHDOG_NOTICE    => 'notice',
+    WATCHDOG_INFO      => 'info',
+    WATCHDOG_DEBUG     => 'debug',
+  );
+
+  // Set orders.
+  $orders = array(
+    'wid'       => 'id',
+    'type'      => 'type',
+    'timestamp' => 'date',
+    'message'   => 'message',
+    'user'      => 'user',
+  );
+
+  // Set sort-orders.
+  $sort_orders = array(
+    'ASC'  => 'Ascending',
+    'DESC' => 'Descending',
+  );
+
+  // Get types.
+  $query   = 'SELECT DISTINCT type FROM `' . $databases['default']['default']['prefix'] . 'watchdog` ORDER BY type ASC;';
+  $results = db_query($query);
+
+  foreach ($results as $type) {
+    $types[$type->type] = $type->type;
+  }
+
+  // Get collapse-level.
+  if (isset($_SESSION['watchlog_filter_type']) ||
+      isset($_SESSION['watchlog_filter_severity']) ||
+      isset($_SESSION['watchlog_filter_date_from']) ||
+      isset($_SESSION['watchlog_filter_date_to']) ||
+      isset($_SESSION['watchlog_filter_search'])) {
+    $collapsed = FALSE;
+  }
+
+  drupal_add_css(drupal_get_path('module', 'watchlog') . '/watchlog.css');
+
+  // Add filter-form.
+  $form = array(
+    'watchlog_wrapper' => array(
+      '#type'        => 'fieldset',
+      '#title'       => t('Filter Watchlog'),
+      '#collapsible' => TRUE,
+      '#collapsed'   => $collapsed,
+
+      'filter_type_wrapper' => array(
+        '#type'        => 'fieldset',
+        '#title'       => t('Filter by type'),
+        '#collapsible' => FALSE,
+
+        'filter_type' => array(
+          '#type'          => 'select',
+          '#size'          => 12,
+          '#options'       => $types,
+          '#default_value' => (isset($_SESSION['watchlog_filter_type']) ? $_SESSION['watchlog_filter_type'] : NULL),
+        ),
+      ),
+
+      'filter_severity_wrapper' => array(
+        '#type'        => 'fieldset',
+        '#title'       => t('Filter by severity'),
+        '#collapsible' => FALSE,
+
+        'filter_severity' => array(
+          '#type'          => 'select',
+          '#size'          => 12,
+          '#options'       => $severities,
+          '#default_value' => (isset($_SESSION['watchlog_filter_severity']) ? $_SESSION['watchlog_filter_severity'] : NULL),
+        ),
+      ),
+
+      'filter_date_wrapper' => array(
+        '#type'        => 'fieldset',
+        '#title'       => t('Filter by date'),
+        '#collapsible' => FALSE,
+
+        'filter_date_from' => array(
+          '#type'          => 'textfield',
+          '#title'         => t('From'),
+          '#description'   => t('Format: DD.MM.YYYY HH:MM:SS'),
+          '#default_value' => (isset($_SESSION['watchlog_filter_date_from']) ? $_SESSION['watchlog_filter_date_from'] : NULL),
+        ),
+        'filter_date_to' => array(
+          '#type'          => 'textfield',
+          '#title'         => t('To'),
+          '#description'   => t('Format: DD.MM.YYYY HH:MM:SS'),
+          '#default_value' => (isset($_SESSION['watchlog_filter_date_to']) ? $_SESSION['watchlog_filter_date_to'] : NULL),
+        ),
+      ),
+
+      'filter_search_wrapper' => array(
+        '#type'        => 'fieldset',
+        '#title'       => t('Filter by search'),
+        '#collapsible' => FALSE,
+
+        'filter_search' => array(
+          '#type'          => 'textfield',
+          '#title'         => t('Search text'),
+          '#default_value' => (isset($_SESSION['watchlog_filter_search']) ? $_SESSION['watchlog_filter_search'] : NULL),
+        ),
+      ),
+
+      'filter_limit_wrapper' => array(
+        '#type'        => 'fieldset',
+        '#title'       => t('Filter by limit and order'),
+        '#collapsible' => FALSE,
+
+        'filter_limit' => array(
+          '#type'          => 'textfield',
+          '#title'         => t('Set limit of results'),
+          '#description'   => t('Set limit to "0" for no limit.'),
+          '#default_value' => (isset($_SESSION['watchlog_filter_limit']) ? $_SESSION['watchlog_filter_limit'] : '100'),
+        ),
+        'filter_order' => array(
+          '#type'          => 'select',
+          '#title'         => 'Sort by',
+          '#options'       => $orders,
+          '#default_value' => (isset($_SESSION['watchlog_filter_order']) ? $_SESSION['watchlog_filter_order'] : NULL),
+        ),
+        'filter_order_direction' => array(
+          '#type'          => 'select',
+          '#title'         => 'Sort direction',
+          '#options'       => $sort_orders,
+          '#default_value' => (isset($_SESSION['watchlog_filter_order_direction']) ? $_SESSION['watchlog_filter_order_direction'] : 'DESC'),
+        ),
+      ),
+
+      'filter_actions_wrapper' => array(
+        '#type'        => 'fieldset',
+        '#title'       => t('Filter actions'),
+        '#collapsible' => FALSE,
+
+        'apply_filter' => array(
+          '#type'   => 'submit',
+          '#value'  => 'Apply filter',
+          '#submit' => array(
+            'watchlog_view_logs_submit'
+          )
+        ),
+      ),
+    ),
+    'stats_on_top' => array(
+      '#type'   => 'markup',
+      '#markup' => '',
+      '#prefix' => '<div>',
+      '#suffix' => '<br />&nbsp;</div>',
+    ),
+    'output_table' => array(
+      '#type'   => 'markup',
+      '#prefix' => '<table>',
+      '#suffix' => '</table>',
+
+      'thead' => array(
+        '#type'   => 'markup',
+        '#markup' => '<thead><tr><th>ID</th><th>Type</th><th>Date</th><th>User</th><th>Message</th><th>Variables</th></tr></thead>',
+      ),
+      'tbody' => array(
+        '#type'   => 'markup',
+        '#prefix' => '<tbody>',
+        '#suffix' => '</tbody>',
+      ),
+    ),
+    'stats_on_bottom' => array(
+      '#type'   => 'markup',
+      '#markup' => '',
+      '#prefix' => '<div>',
+      '#suffix' => '</div>',
+    ),
+  );
+
+  // Add filter-reset button if applicable.
+  if (!$collapsed) {
+    $form['watchlog_wrapper']['filter_actions_wrapper']['reset_filter'] = array(
+      '#type'   => 'submit',
+      '#value'  => 'Reset filter',
+      '#submit' => array(
+        'watchlog_view_logs_reset'
+      )
+    );
+  }
+
+  // Get filters saved in session.
+  $filter_type            = (isset($_SESSION['watchlog_filter_type'])            ? $_SESSION['watchlog_filter_type']            : NULL);
+  $filter_severity        = (isset($_SESSION['watchlog_filter_severity'])        ? $_SESSION['watchlog_filter_severity']        : NULL);
+  $filter_date_from       = (isset($_SESSION['watchlog_filter_date_from'])       ? $_SESSION['watchlog_filter_date_from']       : $date_from);
+  $filter_date_to         = (isset($_SESSION['watchlog_filter_date_to'])         ? $_SESSION['watchlog_filter_date_to']         : $date_to);
+  $filter_search          = (isset($_SESSION['watchlog_filter_search'])          ? $_SESSION['watchlog_filter_search']          : NULL);
+  $filter_limit           = (isset($_SESSION['watchlog_filter_limit'])           ? $_SESSION['watchlog_filter_limit']           : '100');
+  $filter_order           = (isset($_SESSION['watchlog_filter_order'])           ? $_SESSION['watchlog_filter_order']           : NULL);
+  $filter_order_direction = (isset($_SESSION['watchlog_filter_order_direction']) ? $_SESSION['watchlog_filter_order_direction'] : 'DESC');
+
+  // Convert values.
+  $filter_date_from       = strtotime($filter_date_from);
+  $filter_date_to         = strtotime($filter_date_to);
+  $filter_limit           = (!is_numeric($filter_limit) ? 100 : (int) $filter_limit);
+
+  if ($filter_date_from === FALSE ||
+      $filter_date_from === -1) {
+    $filter_date_from = NULL;
+  }
+
+  if ($filter_date_to === FALSE ||
+      $filter_date_to === -1) {
+    $filter_date_to = NULL;
+  }
+
+  // Construct base query.
+  $query = 'SELECT * FROM `' . $databases['default']['default']['prefix'] . 'watchdog`';
+
+  // Add 'WHERE'.
+  if (($filter_type !== NULL && !empty($filter_type)) ||
+      ($filter_severity !== NULL && !empty($filter_severity)) ||
+      ($filter_date_from !== NULL && !empty($filter_date_from)) ||
+      ($filter_date_to !== NULL && !empty($filter_date_to))) {
+    $query .= ' WHERE';
+  }
+
+  $where_caluses = array();
+
+  // Add filter for type.
+  if ($filter_type !== NULL &&
+      !empty($filter_type)) {
+    $where_caluses[] = ' `type` = \'' . $filter_type . '\'';
+  }
+
+  // Add filter for severity.
+  if ($filter_severity !== NULL &&
+      !empty($filter_severity)) {
+    $where_caluses[] = ' `severity` = ' . $filter_severity;
+  }
+
+  // Add filter for from-date.
+  if ($filter_date_from !== NULL &&
+      !empty($filter_date_from)) {
+    $where_caluses[] = ' `timestamp` >= ' . $filter_date_from;
+  }
+
+  // Add filter for to-date.
+  if ($filter_date_to !== NULL &&
+      !empty($filter_date_to)) {
+    $where_caluses[] = ' `timestamp` <= ' . $filter_date_to;
+  }
+
+  // Cycle and add WHERE-clauses.
+  if (count($where_caluses)) {
+    for ($i = 0; $i < count($where_caluses); $i++) {
+      $query .= $where_caluses[$i] . ($i < (count($where_caluses) -1) ? ' AND' : '');
+    }
+  }
+
+  // Add order-by clause.
+  if ($filter_order !== NULL &&
+      !empty($filter_order)) {
+    $query .= ' ORDER BY `' . $filter_order . '` ' . $filter_order_direction;
+  }
+
+  // End query.
+  $query .= ';';
+
+  // Execute query and output results.
+  $added   = 0;
+  $results = db_query($query);
+  $output  = array();
+  $users   = array(
+    'uid0' => t('Anonymous'),
+  );
+
+  foreach ($results as $record) {
+    $add     = TRUE;
+    $message = $record->message;
+    $vars    = unserialize($record->variables);
+
+    if (count($vars)) {
+      foreach ($vars as $key => $value) {
+        if (strpos($message, $key) !== FALSE) {
+          $message = str_replace($key, $value, $message);
+        }
+      }
+    }
+
+    if ($filter_search !== NULL &&
+        !empty($filter_search)) {
+      if (strpos($message, $filter_search) === FALSE) {
+        $add = FALSE;
+      }
+    }
+
+    if ($add) {
+      if ($record->uid > 0) {
+        if (!isset($users['uid' . $record->uid])) {
+          $query_users = 'SELECT `name` FROM `' . $databases['default']['default']['prefix'] . 'users` WHERE `uid` = ' . $record->uid . ' LIMIT 1;';
+          $results_users = db_query($query_users);
+
+          foreach ($results_users as $user) {
+            $users['uid' . $record->uid] = $user->name;
+          }
+        }
+      }
+
+      $output[] = array(
+        'id'        => $record->wid,
+        'type'      => $record->type,
+        'timestamp' => date('d.m.Y H:i:s', $record->timestamp),
+        'message'   => (strlen($message) > 500 ? substr($message, 0, 500) . ' [...]' : $message),
+        'vars'      => $record->variables,
+        'user'      => ($record->uid > 0 ? l($users['uid' . $record->uid], 'user/' . $record->uid) : $users['uid' . $record->uid]),
+      );
+
+      $added++;
+
+      if ($added == $filter_limit) {
+        break;
+      }
+    }
+  }
+
+  // Output results.
+  $is_alt = FALSE;
+
+  foreach ($output as $record) {
+    $form['output_table']['tbody'][$record['id']] = array(
+      '#type'   => 'markup',
+      '#markup' =>
+        '<tr class="watchlog-row ' . ($is_alt ? 'even' : 'odd') . '"">' .
+          '<td class="watchlog-small">' . l($record['id'], 'admin/reports/watchlog/view/' . $record['id']) . '</td>' .
+          '<td class="watchlog-large">' . $record['type'] . '</td>' .
+          '<td class="watchlog-large">' . $record['timestamp'] . '</td>' .
+          '<td class="watchlog-large">' . $record['user'] . '</td>' .
+          '<td>' . $record['message'] . '</td>' .
+          '<td>' . $record['vars'] . '</td>' .
+        '</tr>',
+    );
+
+    $is_alt = !$is_alt;
+  }
+
+  $form['stats_on_top']['#markup']    = t('Displaying %number results', array('%number' => count($output)));
+  $form['stats_on_bottom']['#markup'] = t('Displaying %number results', array('%number' => count($output)));
+
+  return $form;
+}
+
+/**
+ * Resets the session-values for this user.
+ */
+function watchlog_view_logs_reset() {
+  unset($_SESSION['watchlog_filter_type']);
+  unset($_SESSION['watchlog_filter_severity']);
+  unset($_SESSION['watchlog_filter_date_from']);
+  unset($_SESSION['watchlog_filter_date_to']);
+  unset($_SESSION['watchlog_filter_search']);
+  unset($_SESSION['watchlog_filter_limit']);
+  unset($_SESSION['watchlog_filter_order']);
+  unset($_SESSION['watchlog_filter_order_direction']);
+}
+
+/**
+ * Applies the filter settings to the search.
+ */
+function watchlog_view_logs_submit($form, &$form_state) {
+  $_SESSION['watchlog_filter_type']            = $form_state['values']['filter_type'];
+  $_SESSION['watchlog_filter_severity']        = $form_state['values']['filter_severity'];
+  $_SESSION['watchlog_filter_date_from']       = $form_state['values']['filter_date_from'];
+  $_SESSION['watchlog_filter_date_to']         = $form_state['values']['filter_date_to'];
+  $_SESSION['watchlog_filter_search']          = $form_state['values']['filter_search'];
+  $_SESSION['watchlog_filter_limit']           = $form_state['values']['filter_limit'];
+  $_SESSION['watchlog_filter_order']           = $form_state['values']['filter_order'];
+  $_SESSION['watchlog_filter_order_direction'] = $form_state['values']['filter_order_direction'];
+}
