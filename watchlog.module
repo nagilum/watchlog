@@ -11,11 +11,19 @@
 function watchlog_menu() {
   $items = array(
     'admin/reports/watchlog' => array(
-      'title'            => 'Watchlog',
-      'description'      => 'A different view of the dblog entries.',
+      'title'            => t('Watchlog'),
+      'description'      => t('A different view of the dblog entries.'),
       'page callback'    => 'drupal_get_form',
       'page arguments'   => array('watchlog_view_logs'),
       'access arguments' => array('administer watchlog'),
+    ),
+    'admin/reports/watchlog/view/%' => array(
+      'title'            => t('Watchlog View Entry'),
+      'description'      => t('View a single entry in the log table.'),
+      'page callback'    => 'drupal_get_form',
+      'page arguments'   => array('watchlog_view_entry', 4),
+      'access arguments' => array('administer watchlog'),
+      'type'             => MENU_CALLBACK,
     ),
   );
 
@@ -34,6 +42,171 @@ function watchlog_permission() {
   );
 
   return $permissions;
+}
+
+/**
+ * View a single entry in the log table.
+ *
+ * @param int $wid
+ *   The id of the entry to load.
+ */
+function watchlog_view_entry($form, $form_state, $wid) {
+  global $databases;
+
+  drupal_add_css(drupal_get_path('module', 'watchlog') . '/watchlog.css');
+
+  $form = array(
+    'table' => array(
+      '#type'   => 'markup',
+      '#prefix' => '<table>',
+      '#suffix' => '</table>',
+    ),
+  );
+
+  $query   = 'SELECT * FROM `' . $databases['default']['default']['prefix'] . 'watchdog` WHERE `wid` = ' . $wid . ';';
+  $results = db_query($query);
+
+  foreach ($results as $entry) {
+    if (function_exists('dsm')) {
+      dsm(unserialize($entry->variables));
+    }
+
+    // Get and set user info.
+    $username = t('Anonymous');
+
+    $user_query   = 'SELECT `name`,`mail` FROM `' . $databases['default']['default']['prefix'] . 'users` WHERE `uid` = ' . $entry->uid . ';';
+    $user_results = db_query($user_query);
+
+    foreach ($user_results as $user) {
+      $username = '#' . $entry->uid . ' - ' . l($user->name, 'user/' . $entry->uid) . ' - ' . $user->mail;
+      break;
+    }
+
+    // Translate severity.
+    $severity = NULL;
+
+    switch ($entry->severity) {
+      case WATCHDOG_EMERGENCY:
+        $severity = 'emergency';
+        break;
+
+      case WATCHDOG_ALERT:
+        $severity = 'alert';
+        break;
+
+      case WATCHDOG_CRITICAL:
+        $severity = 'critical';
+        break;
+
+      case WATCHDOG_ERROR:
+        $severity = 'error';
+        break;
+
+      case WATCHDOG_WARNING:
+        $severity = 'warning';
+        break;
+
+      case WATCHDOG_NOTICE:
+        $severity = 'notice';
+        break;
+
+      case WATCHDOG_INFO:
+        $severity = 'info';
+        break;
+
+      case WATCHDOG_DEBUG:
+        $severity = 'debug';
+        break;
+    }
+
+    // Translate message.
+    $message = $entry->message;
+    $vars    = unserialize($entry->variables);
+
+    if (count($vars)) {
+      foreach ($vars as $key => $value) {
+        if (strpos($message, $key) !== FALSE) {
+          $message = str_replace($key, $value, $message);
+        }
+      }
+    }
+
+    // Output form.
+    $form['table']['tbody'] = array(
+      '#type'   => 'markup',
+      '#prefix' => '<tbody>',
+      '#suffix' => '</tbody>',
+
+      'wid'       => array(
+        '#type'   => 'markup',
+        '#prefix' => '<tr class="odd"><td class="watchlog-entry-cell-title">' . t('ID') . '</td><td>',
+        '#suffix' => '</td></tr>',
+        '#markup' => $entry->wid,
+      ),
+      'type'      => array(
+        '#type'   => 'markup',
+        '#prefix' => '<tr class="even"><td class="watchlog-entry-cell-title">' . t('Type') . '</td><td>',
+        '#suffix' => '</td></tr>',
+        '#markup' => $entry->type,
+      ),
+      'date'      => array(
+        '#type'   => 'markup',
+        '#prefix' => '<tr class="odd"><td class="watchlog-entry-cell-title">' . t('Date') . '</td><td>',
+        '#suffix' => '</td></tr>',
+        '#markup' => date('d.m.Y H:i:s', $entry->timestamp),
+      ),
+      'user'      => array(
+        '#type'   => 'markup',
+        '#prefix' => '<tr class="even"><td class="watchlog-entry-cell-title">' . t('User') . '</td><td>',
+        '#suffix' => '</td></tr>',
+        '#markup' => $username,
+      ),
+      'location'  => array(
+        '#type'   => 'markup',
+        '#prefix' => '<tr class="odd"><td class="watchlog-entry-cell-title">' . t('Location') . '</td><td>',
+        '#suffix' => '</td></tr>',
+        '#markup' => l($entry->location, $entry->location),
+      ),
+      'referer'   => array(
+        '#type'   => 'markup',
+        '#prefix' => '<tr class="even"><td class="watchlog-entry-cell-title">' . t('Referer') . '</td><td>',
+        '#suffix' => '</td></tr>',
+        '#markup' => l($entry->referer, $entry->referer),
+      ),
+      'link'      => array(
+        '#type'   => 'markup',
+        '#prefix' => '<tr class="odd"><td class="watchlog-entry-cell-title">' . t('Link') . '</td><td>',
+        '#suffix' => '</td></tr>',
+        '#markup' => ($entry->link !== NULL && !empty($entry->link) ? l($entry->link, $entry->link) : '&nbsp;'),
+      ),
+      'severity'  => array(
+        '#type'   => 'markup',
+        '#prefix' => '<tr class="even"><td class="watchlog-entry-cell-title">' . t('Severity') . '</td><td>',
+        '#suffix' => '</td></tr>',
+        '#markup' => $severity,
+      ),
+      'hostname'  => array(
+        '#type'   => 'markup',
+        '#prefix' => '<tr class="odd"><td class="watchlog-entry-cell-title">' . t('Hostname') . '</td><td>',
+        '#suffix' => '</td></tr>',
+        '#markup' => $entry->hostname,
+      ),
+      'message'   => array(
+        '#type'   => 'markup',
+        '#prefix' => '<tr class="even"><td class="watchlog-entry-cell-title">' . t('Message') . '</td><td>',
+        '#suffix' => '</td></tr>',
+        '#markup' => $message,
+      ),
+      'variables' => array(
+        '#type'   => 'markup',
+        '#prefix' => '<tr class="odd"><td class="watchlog-entry-cell-title">' . t('Variables') . '</td><td>',
+        '#suffix' => '</td></tr>',
+        '#markup' => '<pre>' . print_r(unserialize($entry->variables), TRUE) . '</pre>',
+      ),
+    );
+  }
+
+  return $form;
 }
 
 /**
@@ -210,7 +383,7 @@ function watchlog_view_logs() {
 
       'thead' => array(
         '#type'   => 'markup',
-        '#markup' => '<thead><tr><th>ID</th><th>Type</th><th>Date</th><th>User</th><th>Message</th><th>Variables</th></tr></thead>',
+        '#markup' => '<thead><tr><th>' . t('ID') . '</th><th>' . t('Type') . '</th><th>' . t('Date') . '</th><th>' . t('User') . '</th><th>' . t('Message') . '</th><th>' . t('Variables') . '</th></tr></thead>',
       ),
       'tbody' => array(
         '#type'   => 'markup',
