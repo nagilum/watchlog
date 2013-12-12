@@ -504,7 +504,10 @@ function watchlog_view_logs() {
     if (count($vars)) {
       foreach ($vars as $key => $value) {
         if (strpos($message, $key) !== FALSE) {
-          $message = str_replace($key, $value, $message);
+          if (!is_array($value) &&
+              !is_object($value)) {
+            $message = str_replace($key, $value, $message);
+          }
         }
       }
     }
